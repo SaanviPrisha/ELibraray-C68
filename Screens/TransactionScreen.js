@@ -3,6 +3,8 @@ import { StyleSheet, Text, View, TouchableOpacity, TextInput, Image } from 'reac
 import { BarCodeScanner } from 'expo-barcode-scanner';
 import * as Permissions from 'expo-permissions'
 import { Header } from 'react-native-elements'
+import db from '../Config'
+import firebase from 'firebase'
 
 
 export default class TransactionScreen extends React.Component {
@@ -40,6 +42,49 @@ export default class TransactionScreen extends React.Component {
       })
     }
   }
+  handleTransaction = async () => {
+    await db.collection("Books").doc(this.state.scannedBookID).get()
+    .then((doc) => {
+      var book = doc.data()
+      if(book.bookAvailability == true) {
+        this.initiateBookIssue()
+      } else {
+        this.initiateBookReturn()
+      }
+    }) 
+    this.setState({
+      scannedBookID: "",
+      scannedStudentID: ""
+    })
+  }
+  initiateBookIssue = async () => {
+    await db.collection("Transactions").add({
+      bookId: this.state.scannedBookID,
+      date: firebase.firestore.Timestamp.now().toDate(),
+      studentID: this.state.scannedStudentID,
+      transactionType: "issue"
+    })
+    db.collection("Books").doc(this.state.scannedBookID).update({
+      bookAvailability: false
+    })
+    db.collection("Students").doc(this.state.scannedStudentID).update({
+      BooksIssued: firebase.firestore.FieldValue.increment(1)
+    })
+  }
+  initiateBookReturn = async () => {
+    await db.collection("Transactions").add({
+      bookId: this.state.scannedBookID,
+      date: firebase.firestore.Timestamp.now().toDate(),
+      studentID: this.state.scannedStudentID,
+      transactionType: "return"
+    })
+    db.collection("Books").doc(this.state.scannedBookID).update({
+      bookAvailability: true
+    })
+    db.collection("Students").doc(this.state.scannedStudentID).update({
+      BooksIssued: firebase.firestore.FieldValue.increment(-1)
+    })
+  }
   render() {
     const hasCamPerm = this.state.hasCamPerm
     const buttonState = this.state.buttonState
@@ -56,7 +101,11 @@ export default class TransactionScreen extends React.Component {
             <Image source={require('../assets/booklogo.jpg')} style={styles.image}/>
           </View>
           <View style={styles.center}>
-            <TextInput placeholder="Book ID" style={styles.textInput}/>
+            <TextInput placeholder="Book ID" style={styles.textInput} onChangeText={(text) => {
+              this.setState({
+                scannedBookID: text
+              })
+            }}/>
             <TouchableOpacity onPress={() => {
               this.getCameraPermissions('bookID')
             }} style={styles.scanButton}>
@@ -64,13 +113,20 @@ export default class TransactionScreen extends React.Component {
           </TouchableOpacity>
           </View>
           <View style={styles.center}>
-            <TextInput placeholder="Student ID" style={styles.textInput}/>
+            <TextInput placeholder="Student ID" style={styles.textInput} onChangeText={(text) => {
+              this.setState({
+                scannedStudentID: text
+              })
+            }}/>
             <TouchableOpacity onPress={() => {
               this.getCameraPermissions('studentID')
             }} style={styles.scanButton}>
             <Text style={styles.ScanButtonText}>Scan</Text>
           </TouchableOpacity>
           </View>
+          <TouchableOpacity onPress={() => {this.handleTransaction()}}>
+            <Text style={styles.ScanButtonText}>Sumbit</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -115,4 +171,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   }
-});
+})
